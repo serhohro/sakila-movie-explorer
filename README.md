@@ -55,7 +55,4 @@ Ensure you have MySQL (with Sakila DB loaded) and MongoDB instances running.
 Configure your connection strings in config.py.
 
 Run the application:
-
-Bash
-
 python main.py
