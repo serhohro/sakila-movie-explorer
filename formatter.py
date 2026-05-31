@@ -1,158 +1,174 @@
 import textwrap
+from typing import List, Dict, Any, Optional, Tuple, Final
 
 class Formatter:
+    """
+    Class for visualising data as text-based tables in the console.
+    Supports automatic word wrapping, color schemes, and zebra striping.
+    """
 
-    DEFAULT_CONFIG = {
-        "border": True,
-        "max_col_width": 30,
-        "wrap": True,
-        "truncate": False,
-        "header_align": "center",
-        "header_bold": None,
-        "header_capitalize": True,
-        "header_custom": None,
-        "align": "left",
-        "id_align_right": True,
-        "color_header": "\033[93m",
-        "color_reset": "\033[0m",
-        "border_chars": {
-            "h": "═",
-            "v": "║",
-            "c": "╬"
+    # Default configuration (Final indicates the constant nature of the dictionary)
+    DEFAULT_CONFIG: Final[Dict[str, Any]] = {
+        "border": True,               # Whether to draw table borders
+        "max_col_width": 30,          # Maximum column width before wrapping text
+        "wrap": True,                 # Whether to allow wrapping long text into new lines
+        "truncate": False,            # Whether to truncate text instead of wrapping
+        "header_align": "center",     # Header alignment (left, center, right)
+        "header_bold": False,         # Whether to make headers bold (ANSI)
+        "header_capitalize": True,    # Whether to capitalize headers
+        "header_custom": None,        # List of custom header names
+        "align": "left",              # Alignment of data inside cells
+        "id_align_right": True,       # Whether to right-align the ID column
+        "color_header": "\033[93m",   # Header color (yellow ANSI)
+        "color_reset": "\033[0m",     # Color reset
+        "border_chars": {             # Characters used to draw borders
+            "h": "═",                 # Horizontal line
+            "v": "║",                 # Vertical line
+            "c": "╬"                  # Intersection
         },
-        "zebra": False,
-        "zebra_colors": ("\033[48;5;235m", "\033[0m"),
+        "zebra": False,               # Alternating row colors
+        "zebra_colors": ("\033[48;5;235m", "\033[0m"), # Colors for zebra striping
     }
 
-    def __init__(self, config=None):
+    def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
+        """
+        Initializes the formatter with optional configuration overrides.
+        :param config: Dictionary with user settings.
+        """
         self.config = self.DEFAULT_CONFIG.copy()
         if config:
-            for k, v in config.items():
-                if isinstance(v, dict) and k in self.config:
-                    self.config[k].update(v)
+            for key, value in config.items():
+                # Recursively update nested dictionaries (e.g., border characters)
+                if isinstance(value, dict) and key in self.config:
+                    self.config[key].update(value)
                 else:
-                    self.config[k] = v
+                    self.config[key] = value
 
-    def _apply_color(self, text, color=None):
-        if not color:
+    def _apply_color(self, text: str, color_code: Optional[str] = None) -> str:
+        """Wraps text in ANSI color codes."""
+        if not color_code:
             return text
-        return f"{color}{text}{self.config['color_reset']}"
+        return f"{color_code}{text}{self.config['color_reset']}"
 
-    def _format_header(self, name):
-        if self.config["header_capitalize"]:
-            name = name.capitalize()
-        if self.config["header_bold"]:
-            name = f"\033[1m{name}\033[0m"
-        return name
-
-    def _wrap_text(self, text, width):
+    def _wrap_cell_text(self, text: str, width: int) -> List[str]:
+        """
+        Splits cell text into lines based on the allowed width.
+        :param text: Original source text.
+        :param width: Maximum permitted column width.
+        :return: A list of lines that fit within the specified width.
+        """
         if self.config["truncate"]:
             return [text[:width]]
-        wrapped = textwrap.wrap(text, width=width)
-        return wrapped or [""]
+        
+        # Use textwrap to automatically split by words
+        wrapped_lines = textwrap.wrap(text, width=width)
+        return wrapped_lines if wrapped_lines else [""]
 
-    def _align_text(self, text, width, align):
-        if align == "right":
+    def _align_cell_content(self, text: str, width: int, alignment: str) -> str:
+        """Aligns text within a cell using padding spaces."""
+        if alignment == "right":
             return text.rjust(width)
-        elif align == "center":
+        elif alignment == "center":
             return text.center(width)
         return text.ljust(width)
 
-    def make_table(self, rows):
+    def make_table(self, rows: List[Dict[str, Any]]) -> str:
+        """
+        Main method to generate a table string from a list of dictionaries.
+        :param rows: Data formatted as [{'col1': val, 'col2': val}, ...].
+        :return: A string representation of the table ready for printing.
+        """
         if not rows:
-            return ""
+            return "Empty dataset."
 
         cfg = self.config
-        bc = cfg["border_chars"]
+        borders = cfg["border_chars"]
 
-        # Заголовки
-        if cfg["header_custom"]:
-            headers = cfg["header_custom"]
-        else:
-            headers = list(rows[0].keys())
+        # Determine headers (from the first dictionary or custom ones)
+        headers = cfg["header_custom"] if cfg["header_custom"] else list(rows[0].keys())
 
-        # --------------------------
-        # 1. Вычисляем ширину колонок (учитывая данные и заголовки)
-        # --------------------------
-        col_widths = [len(h) for h in headers]
-
+        # 1. Calculate optimal column widths
+        column_widths: List[int] = [len(str(h)) for h in headers]
+        
         for row in rows:
-            for i, h in enumerate(headers):
-                val = str(row[h])
-                # Разделяем на строки для wrap
-                wrapped = self._wrap_text(val, cfg["max_col_width"])
-                max_len = max(len(line) for line in wrapped)
-                if max_len > col_widths[i]:
-                    col_widths[i] = max_len
-        # Ограничение максимальной ширины
-        col_widths = [min(w, cfg["max_col_width"]) for w in col_widths]
+            for i, header in enumerate(headers):
+                cell_value = str(row.get(header, ""))
+                # Check text length after virtual word wrapping
+                wrapped = self._wrap_cell_text(cell_value, cfg["max_col_width"])
+                max_line_in_cell = max(len(line) for line in wrapped)
+                if max_line_in_cell > column_widths[i]:
+                    column_widths[i] = max_line_in_cell
 
-        # --------------------------
-        # 2. Формируем заголовки
-        # --------------------------
-        header_cells = []
-        for i, h in enumerate(headers):
-            hn = self._format_header(h)
-            hn = self._align_text(hn, col_widths[i], cfg["header_align"])
-            hn = self._apply_color(hn, cfg["color_header"])
-            header_cells.append(hn)
+        # Enforce width constraints according to config limits
+        column_widths = [min(width, cfg["max_col_width"]) for width in column_widths]
 
-        # --------------------------
-        # 3. Формируем строки данных
-        # --------------------------
-        str_rows = []
+        # 2. Prepare header row
+        formatted_headers: List[str] = []
+        for i, header in enumerate(headers):
+            display_name = header.capitalize() if cfg["header_capitalize"] else header
+            aligned_header = self._align_cell_content(display_name, column_widths[i], cfg["header_align"])
+            colored_header = self._apply_color(aligned_header, cfg["color_header"])
+            formatted_headers.append(colored_header)
+
+        # 3. Prepare data (split cells into lines)
+        table_data_matrix: List[List[List[str]]] = []
         for row in rows:
-            wrapped_cols = []
-            for i, h in enumerate(headers):
-                val = str(row[h])
+            formatted_row_cols = []
+            for i, header in enumerate(headers):
+                val = str(row.get(header, ""))
+                
+                # Special alignment rules for IDs
+                current_align = cfg["align"]
                 if cfg["id_align_right"] and i == 0 and val.isdigit():
-                    align = "right"
-                else:
-                    align = cfg["align"]
+                    current_align = "right"
 
-                wrapped = self._wrap_text(val, col_widths[i])
-                wrapped_aligned = [self._align_text(line, col_widths[i], align) for line in wrapped]
-                wrapped_cols.append(wrapped_aligned)
-            str_rows.append(wrapped_cols)
+                lines = self._wrap_cell_text(val, column_widths[i])
+                aligned_lines = [self._align_cell_content(l, column_widths[i], current_align) for l in lines]
+                formatted_row_cols.append(aligned_lines)
+            table_data_matrix.append(formatted_row_cols)
 
-        # --------------------------
-        # 4. Генерация таблицы
-        # --------------------------
-        output = []
-        output.append("\n")
+        # 4. Assemble final table string
+        result_lines: List[str] = ["\n"]
 
-        def make_sep():
-            if not cfg["border"]:
-                return None
-            parts = [bc["h"] * w for w in col_widths]
-            return bc["c"] + bc["c"].join(parts) + bc["c"]
+        def create_separator() -> Optional[str]:
+            """Generates a separator line based on column widths."""
+            if not cfg["border"]: return None
+            parts = [borders["h"] * width for width in column_widths]
+            return borders["c"] + borders["c"].join(parts) + borders["c"]
 
-        sep_line = make_sep()
-        if sep_line:
-            output.append(sep_line)
+        separator = create_separator()
+        
+        # Draw table top border
+        if separator: result_lines.append(separator)
+        
+        header_line = (borders["v"] if cfg["border"] else " | ").join(formatted_headers)
+        if cfg["border"]: header_line = borders["v"] + header_line + borders["v"]
+        result_lines.append(header_line)
+        
+        if separator: result_lines.append(separator)
 
-        if cfg["border"]:
-            output.append(bc["v"] + bc["v"].join(header_cells) + bc["v"])
-            output.append(sep_line)
-        else:
-            output.append(" | ".join(header_cells))
-            output.append("-" * (sum(col_widths) + 3 * (len(col_widths) - 1)))
+        # Draw data rows line by line
+        for row_index, column_data in enumerate(table_data_matrix):
+            # Find the maximum line count in the tallest cell of this row
+            max_height = max(len(col_lines) for col_lines in column_data)
+            
+            for line_no in range(max_height):
+                row_parts = []
+                for col_index, lines_list in enumerate(column_data):
+                    # If this cell has fewer lines than its neighbor, pad it with spaces
+                    content = lines_list[line_no] if line_no < len(lines_list) else " " * column_widths[col_index]
+                    row_parts.append(content)
+                
+                final_row_line = (borders["v"] if cfg["border"] else " | ").join(row_parts)
+                if cfg["border"]: final_row_line = borders["v"] + final_row_line + borders["v"]
 
-        for idx, row in enumerate(str_rows):
-            max_lines = max(len(col) for col in row)
-            for line_idx in range(max_lines):
-                line_cells = []
-                for i, col in enumerate(row):
-                    line_cells.append(col[line_idx] if line_idx < len(col) else " " * col_widths[i])
-                line_str = (bc["v"] if cfg["border"] else "").join(line_cells)
-                if cfg["border"]:
-                    line_str = bc["v"] + line_str + bc["v"]
-                # Зебра
-                if cfg["zebra"] and (idx % 2 == 0):
-                    start, end = cfg["zebra_colors"]
-                    line_str = start + line_str + end
-                output.append(line_str)
-            if sep_line:
-                output.append(sep_line)
+                # Apply zebra striping effect
+                if cfg["zebra"] and (row_index % 2 == 0):
+                    start_color, end_color = cfg["zebra_colors"]
+                    final_row_line = f"{start_color}{final_row_line}{end_color}"
+                
+                result_lines.append(final_row_line)
+            
+            if separator: result_lines.append(separator)
 
-        return "\n".join(output)
+        return "\n".join(result_lines)

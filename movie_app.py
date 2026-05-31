@@ -1,7 +1,7 @@
 import os
 import sys
 
-# Настройка путей
+# Path configuration
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 os.chdir(BASE_DIR)
 sys.path.append(BASE_DIR)
@@ -15,176 +15,182 @@ from formatter      import Formatter
 
 class MovieSearchApp:
     """
-    Главный класс приложения (Контроллер).
-    Отвечает за инициализацию систем и навигацию по меню.
+    Main application class (Controller).
+    Handles system initialization and menu navigation.
     """
     
     def __init__(self, config):
         self.config = config
         
-        # Устанавливаем название нашего приложения в консоли
+        # Set our application title in the console window
         self._set_console_title()
         
-        # Инициализация БД и проверка её наличия
+        # Database initialization and readiness check
         self.sakila = SakilaManager(self.config.db_init, self.config.db_login)
-        self._check_database()
 
-        # Инициализация ключевых сервисов
+        # Core services initialization
         self.db = DataBase(self.config.db_init, self.config.db_login)
         self.search = SearchService(self.db)
         self.mongo_logger = MongoLogger(self.config)
     
     def _set_console_title(self):
-        """Устанавливает заголовок окна консоли"""
+        """Sets the console window title."""
         title_str = f"{self.config.app_info['name']} v{self.config.app_info['version']}"
         
         if sys.platform == "win32":
-            # Для Windows команда os.system ожидает формат: title Текст
+            # For Windows, os.system expects format: title Text
             os.system(f"title {title_str}")
         else:
-            # Для Linux/macOS
+            # For Linux/macOS
             sys.stdout.write(f"\x1b]2;{title_str}\x07")
     
     def _check_database(self):
-        """Проверка и установка БД Sakila."""
+        """Verifies and provisions the Sakila database if missing."""
         if not self.sakila.database_exists():
-            print("⚠ База данных Sakila не найдена. Начинаю установку...")
+            print("⚠ Sakila database not found. Starting setup...")
             self.sakila.install_database()
         else:
-            print("✅ База данных Sakila готова к работе.")
+            print("✅ Sakila database is ready.")
 
-    # --- Обработчики пунктов меню ---
+    # --- Menu Item Handlers ---
 
     def search_by_title(self):
-        """Поиск по названию с нормализацией ввода."""
-        print("\n🔍 ПОИСК ПО НАЗВАНИЮ")
-        title = input("Введите название фильма: ").strip()
-        title = " ".join(title.split()) # Очистка от лишних пробелов
+        """Searches by title with input normalization."""
+        print("\n🔍 SEARCH BY TITLE")
+        title = input("Enter movie title: ").strip()
+        title = " ".join(title.split()) # Clean up redundant spaces
         
         if title:
             self.search.browse_by_title(title)
         else:
-            print("❌ Ошибка: пустой ввод.")
+            print("❌ Error: empty input.")
 
     def search_by_genre(self):
-        """Поиск по жанру (логика выбора теперь внутри сервиса)."""
-        print("\n🎭 ПОИСК ПО ЖАНРУ")
+        """Searches by genre (selection logic is encapsulated inside the service)."""
+        print("\n🎭 SEARCH BY GENRE")
         self.search.browse_by_genre()
 
     def search_by_year(self):
-        """Поиск по году или диапазону."""
-        print("\n📅 ПОИСК ПО ГОДУ")
+        """Searches by a single year or a range."""
+        print("\n📅 SEARCH BY YEAR")
         min_y, max_y = self.search.get_year_range()
-        print(f"\n📅 Доступный период в базе: {min_y} — {max_y}")
-        print("Форматы: '2006', '1995-2005', '1988 2000'")
-        year_input = input("Введите данные: ").strip()
+        print(f"\n📅 Available span in database: {min_y} — {max_y}")
+        print("Formats: '2006', '1995-2005', '1988 2000'")
+        year_input = input("Enter data: ").strip()
         
         if year_input:
             self.search.browse_by_year(year_input)
         else:
-            print("❌ Ошибка: год не указан.")
+            print("❌ Error: year not provided.")
     
     def search_by_actor(self):
-        print("\n🔍 ПОИСК ПО АКТЕРАМ")
+        print("\n🔍 SEARCH BY ACTORS")
         self.search.browse_by_actor()
         
     def search_by_genre_and_year(self):
-        """Комплексный поиск."""
-        print("\n🧩 КОМБИНИРОВАННЫЙ ПОИСК (ЖАНР + ГОД)")
+        """Performs a complex multi-criteria search."""
+        print("\n🧩 COMBINED SEARCH (GENRE + YEAR)")
         self.search.browse_by_genre_and_year()
-
+    
+    def search_by_description(self):
+        print("\n🔍 SEARCH BY PLOT / DESCRIPTION")
+        self.search.browse_by_description()
+    
     def show_all(self):
-        """Вывод всех фильмов с жанрами."""
-        print("\n🎬 ВЕСЬ КАТАЛОГ ФИЛЬМОВ")
+        """Outputs all movies along with their genres."""
+        print("\n🎬 ENTIRE MOVIE CATALOG")
         self.search.show_all_movies()
 
     def show_statistics_odd(self):
-        """Отображение статистики запросов из MongoDB."""
-        print("\n📊 СТАТИСТИКА ИСТОРИИ ПОИСКА")
+        """Displays raw search history statistics from MongoDB."""
+        print("\n📊 SEARCH HISTORY STATISTICS")
         
-        print("\n🕒 Последние 5 запросов:")
-        # Просто вызываем и печатаем готовые строки
+        print("\n🕒 Recent 5 queries:")
+        # Invoke and print formatted string logs
         for entry in self.mongo_logger.get_last_searches_formatted():
             print(f" • {entry}")
         
-        print("\n🔥 Самые популярные запросы:")
-        # Логика здесь такая же простая
+        print("\n🔥 Most popular queries:")
+        # Straightforward mapping for basic aggregation logs
         for entry in self.mongo_logger.get_popular_searches_formatted():
             print(f" • {entry}")
 
     def show_statistics(self):
         print("\n")
-        print(f" {'📊 АНАЛИТИКА И ИСТОРИЯ ПОИСКА':^66} ")
+        print(f" {'📊 ANALYTICS AND SEARCH HISTORY':^66} ")
         print("═"*66)
 
-        # Создаем экземпляр форматтера для статистики
+        # Create formatter instance specifically for statistical tabular layouts
         stats_fmt = Formatter({"zebra": True, "border": True})
 
-        # 1. Секция последних запросов
+        # 1. Recent queries section
         last_data = self.mongo_logger.get_last_searches_raw(5)
         if last_data:
-            print("\n🕒 ПОСЛЕДНИЕ ЗАПРОСЫ:")
+            print("\n🕒 RECENT QUERIES:")
+            # Relies on tabular dict format translation done inside mongo_logger
             print(stats_fmt.make_table(last_data))
         else:
-            print("\n🕒 История поиска пока пуста.")
+            print("\n🕒 Search history is currently empty.")
 
-        # 2. Секция популярных запросов
+        # 2. Popular queries section
         popular_data = self.mongo_logger.get_popular_searches_raw(5)
         if popular_data:
-            print("\n🔥 ТОП ПОПУЛЯРНЫХ ЗАПРОСОВ:")
+            print("\n🔥 TOP POPULAR QUERIES:")
             print(stats_fmt.make_table(popular_data))
         
-        input("\nНажмите Enter, чтобы вернуться...")
+        input("\nPress Enter to return...")
+    
     def show_about(self):
-        """Информационная карточка приложения"""
-        info = self.config.app_info # Берем данные из нашего Config
+        """Renders an informational context card for the application."""
+        info = self.config.app_info # Extract data from our Config instance
         
-        # Настройки ширины карточки
+        # Layout card width settings
         width = 50
         line = "═" * (width - 2)
         
-        # Выводим «коробочку» с данными
+        # Display the informational bounding box
         print(f"\n╔{line}╗")
         print(f"║{info['name'].upper():^{width-2}}║")
         print(f"╠{line}╣")
         
-        # Словарь для удобного вывода строк
+        # Mapping dictionary for clean output lines
         details = {
-            "Версия": info["version"],
-            "Разработчик": info["author"],
-            "Год": info["year"],
-            "База данных": "MySQL (Sakila)",
-            "Логирование": "MongoDB (Atlas)"
+            "Version": info["version"],
+            "Developer": info["author"],
+            "Year": info["year"],
+            "Database": info["db"],
+            "Logging": info["log_db"]
         }
 
         for key, value in details.items():
-            # Выравниваем ключ по левому краю, значение по правому
+            # Align keys to the left, values to the right
             content = f" {key}: {value} "
             print(f"║{content:<{width-2}}║")
 
         print(f"╚{line}╝")
-        input("\nНажмите Enter, чтобы вернуться в меню...")
+        input("\nPress Enter to return to the menu...")
     
     def exit_app(self):
-        """Безопасный выход из приложения."""
-        choice = input("\nВы действительно хотите выйти? (y/n): ").strip().lower()
+        """Gracefully terminates application processing loops."""
+        choice = input("\nAre you sure you want to exit? (y/n): ").strip().lower()
         if choice == 'y':
-            self.db.close() # Закрываем соединение с MySQL
-            print("👋 До свидания!")
+            self.db.close() # Close active MySQL connections
+            print("👋 Goodbye!")
             sys.exit(0)
 
     def run(self):
-        """Запуск главного меню."""
+        """Launches the primary application loop."""
         menu = Menu("MOVIE SEARCH SYSTEM")
-        menu.add_item("Поиск по названию", self.search_by_title)
-        menu.add_item("Поиск по жанру", self.search_by_genre)
-        menu.add_item("Поиск по году", self.search_by_year)
-        menu.add_item("Поиск по актеру", self.search_by_actor)
-        menu.add_item("Поиск по жанру + году", self.search_by_genre_and_year)
-        menu.add_item("Показать все фильмы", self.show_all)
-        menu.add_item("Топ запросов (Статистика)", self.show_statistics)
-        menu.add_item("О приложении", self.show_about)
-        menu.add_item("Выход", self.exit_app)
+        menu.add_item("Search by title", self.search_by_title)
+        menu.add_item("Search by description", self.search_by_description)
+        menu.add_item("Search by genre", self.search_by_genre)
+        menu.add_item("Search by year", self.search_by_year)
+        menu.add_item("Search by actor", self.search_by_actor)
+        menu.add_item("Search by genre + year", self.search_by_genre_and_year)
+        menu.add_item("Show all movies", self.show_all)
+        menu.add_item("Top queries (Statistics)", self.show_statistics)
+        menu.add_item("About application", self.show_about)
+        menu.add_item("Exit", self.exit_app)
         
         menu.run()
 
