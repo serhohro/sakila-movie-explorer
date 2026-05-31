@@ -32,7 +32,7 @@ class Config:
         # Application Metadata
         self.app_info: Dict[str, str] = {
             "name": "Sakila Movie Explorer",
-            "version": "1.0.0",
+            "version": "1.1.0",
             "author": "Serhiy Hromyko",
             "year": "2026",
             "db": "Sakila (MySQL)",
